@@ -40,12 +40,7 @@ class Tenant(models.Model):
 
 class Expense(models.Model):
     estate = models.ForeignKey(Estate, on_delete=models.CASCADE, related_name='expenses')
-    category = models.CharField(max_length=100, choices=[
-        ('repairs', 'Repairs'),
-        ('security_salary', 'Security Salary'),
-        ('diesel', 'Diesel'),
-        ('others', 'Others'),
-    ])
+    category = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     date_spent = models.DateField(auto_now_add=True)
