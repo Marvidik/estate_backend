@@ -9,6 +9,7 @@ urlpatterns = [
     
     
     path('payment-issues/', create_payment_issue),
+    path("list-issues/",list_payment_issues),
     path('create-payment/', create_payment,name='create_payment'),
     path('payments/', list_payments, name='list-payments'),
     path('create-expense/', create_expense, name='create-expense'),

@@ -436,3 +436,25 @@ def generate_financial_report(request):
     response['Content-Disposition'] = f'attachment; filename=financial_report_{year}_{month}.xlsx'
 
     return response
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def list_payment_issues(request):
+    try:
+        # Retrieve the Account related to the authenticated user
+        account = Account.objects.get(user=request.user)
+        estate = account.estate
+    except Account.DoesNotExist:
+        return Response({"detail": "User does not have an associated estate."}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Filter the PaymentIssue model for the authenticated user's estate
+    payment_issues = PaymentIssue.objects.filter(estate=estate)
+
+    # Serialize the payment issues data
+    serializer = PaymentIssueSerializer(payment_issues, many=True)
+
+    # Return the serialized data
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
