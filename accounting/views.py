@@ -534,3 +534,20 @@ def resolve_payment_issue(request, pk):
         return Response({"error": "Payment issue not found."}, status=status.HTTP_404_NOT_FOUND)
 
 
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def total_summary(request):
+    try:
+        account = Account.objects.get(user=request.user)
+        estate = account.estate
+    except Account.DoesNotExist:
+        return Response({"detail": "User does not have an associated estate."}, status=status.HTTP_400_BAD_REQUEST)
+
+    total_expenses = Expense.objects.filter(estate=estate).aggregate(total=Sum('amount'))['total'] or 0
+    total_payments = Payment.objects.filter(estate=estate).aggregate(total=Sum('amount'))['total'] or 0
+
+    return Response({
+        "total_expenses": total_expenses,
+        "total_payments": total_payments
+    })

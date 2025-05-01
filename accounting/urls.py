@@ -23,5 +23,6 @@ urlpatterns = [
     path('change-password/',change_password, name='change_password'),
 
     path('resolve-issue/<int:pk>/', resolve_payment_issue, name='resolve-payment-issue'), 
+    path('total-summary/', total_summary, name='total-summary'),
 
 ]
