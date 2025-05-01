@@ -16,9 +16,12 @@ urlpatterns = [
     path('list-expenses/', list_expenses),
     path('monthly-summary/', monthly_summary),
     path("list-due-payment/",list_due_payments),
-    path("export-data/",generate_financial_report)
+    path("export-data/",generate_financial_report),
 
 
+    path('request-password-reset-otp/',request_password_reset_otp, name='request_password_reset_otp'),
+    path('change-password/',change_password, name='change_password'),
 
+    path('resolve-issue/<int:pk>/', resolve_payment_issue, name='resolve-payment-issue'), 
 
 ]

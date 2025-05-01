@@ -25,6 +25,11 @@ from io import BytesIO
 from django.http import HttpResponse
 
 
+from django.core.mail import send_mail
+from random import randint
+from .models import PasswordResetOTP
+
+
 
 @api_view(['POST'])
 def register_user(request):
@@ -82,6 +87,64 @@ def login_user(request):
             "is_admin": account.is_admin
         })
     return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+
+@api_view(['POST'])
+def request_password_reset_otp(request):
+    """
+    Request an OTP for password reset.
+    Expected JSON:
+    {
+        "email": "user@example.com"
+    }
+    """
+    email = request.data.get('email')
+    try:
+        user = User.objects.get(email=email)
+        otp = f"{randint(100000, 999999)}"  # Generate a 6-digit OTP
+
+        # Save or update OTP for the user
+        PasswordResetOTP.objects.update_or_create(user=user, defaults={'otp': otp})
+
+        # Send OTP via email
+        send_mail(
+            subject="Password Reset OTP",
+            message=f"Your OTP for password reset is: {otp}",
+            from_email="ebubeidika@gmail.com",  # Replace with your Gmail address
+            recipient_list=[email],
+        )
+
+        return Response({"message": "OTP sent to your email."}, status=status.HTTP_200_OK)
+    except User.DoesNotExist:
+        return Response({"error": "User with this email does not exist."}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({"errors": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+def change_password(request):
+    """
+    Change password using OTP.
+    Expected JSON:
+    {
+        "email": "user@example.com",
+        "new_password": "new_secure_password"
+    }
+    """
+    email = request.data.get('email')
+    new_password = request.data.get('new_password')
+
+    try:
+        user = User.objects.get(email=email)
+
+        if user :
+            user.set_password(new_password)
+            user.save()
+            return Response({"message": "Password changed successfully."}, status=status.HTTP_200_OK)
+        else:
+            return Response({"error": "User Not Found."}, status=status.HTTP_400_BAD_REQUEST)
+    except (User.DoesNotExist, PasswordResetOTP.DoesNotExist):
+        return Response({"error": "Invalid request."}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
@@ -449,12 +512,25 @@ def list_payment_issues(request):
         return Response({"detail": "User does not have an associated estate."}, status=status.HTTP_400_BAD_REQUEST)
 
     # Filter the PaymentIssue model for the authenticated user's estate
-    payment_issues = PaymentIssue.objects.filter(estate=estate)
+    payment_issues = PaymentIssue.objects.filter(estate=estate,status='active').order_by('-date_issued')
 
     # Serialize the payment issues data
     serializer = PaymentIssueSerializer(payment_issues, many=True)
 
     # Return the serialized data
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['PATCH'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def resolve_payment_issue(request, pk):
+    try:
+        issue = PaymentIssue.objects.get(pk=pk)
+        issue.status = 'resolved'
+        issue.save()
+        return Response({"message": "Payment issue marked as resolved."}, status=status.HTTP_200_OK)
+    except PaymentIssue.DoesNotExist:
+        return Response({"error": "Payment issue not found."}, status=status.HTTP_404_NOT_FOUND)
 
 

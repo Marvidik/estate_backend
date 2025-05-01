@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 
 class Estate(models.Model):
@@ -55,6 +56,7 @@ class PaymentIssue(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     description = models.TextField(blank=True)
     date_issued = models.DateField(auto_now_add=True)
+    status=models.CharField(max_length=50, choices=[('active', 'Active'), ('resolved', 'Resolved')], default='active')
 
 
 class TenantPaymentDue(models.Model):
@@ -74,3 +76,14 @@ class Payment(models.Model):
     description = models.TextField(blank=True)
     date = models.DateField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+from datetime import datetime, timedelta
+
+class PasswordResetOTP(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_valid(self):
+        return timezone.now() < self.created_at + timedelta(minutes=10)  # OTP valid for 10 minutes
