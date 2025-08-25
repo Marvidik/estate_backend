@@ -242,50 +242,81 @@ def create_payment_issue(request):
 def create_payment(request):
     """
     Endpoint for the admin to create a payment record for a tenant.
-    The admin specifies the tenant who made the payment and the payment details.
+    - If `issue` is provided, ensure payment matches the issue amount.
+    - If `issue` is not provided, allow free/donation payments.
     """
-    tenant_id = request.data.get('tenant')  # Match the serializer field name
+    tenant_id = request.data.get('tenant')
+    issue_id = request.data.get('issue')
+    amount = request.data.get('amount')
+
     if not tenant_id:
         return Response({"detail": "Tenant ID is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Get the estate from the admin (logged-in user)
+    # Get estate from logged-in user
     try:
         account = Account.objects.get(user=request.user)
         estate = account.estate
     except Account.DoesNotExist:
         return Response({"detail": "User does not have an associated estate."}, status=status.HTTP_400_BAD_REQUEST)
 
+    # Validate tenant belongs to estate
     try:
         tenant = Tenant.objects.get(id=tenant_id, estate=estate)
     except Tenant.DoesNotExist:
         return Response({"detail": "Tenant not found or does not belong to your estate."}, status=status.HTTP_400_BAD_REQUEST)
 
+    issue = None
+    if issue_id:  # payment tied to an issue
+        try:
+            issue = PaymentIssue.objects.get(id=issue_id, estate=estate)
+        except PaymentIssue.DoesNotExist:
+            return Response({"detail": "Issue not found or does not belong to your estate."}, status=status.HTTP_400_BAD_REQUEST)
+
     serializer = PaymentSerializer(data=request.data)
     if serializer.is_valid():
         try:
             with transaction.atomic():
-                tenant_payment_due = TenantPaymentDue.objects.select_for_update().get(
-                    id=request.data.get('payment_due_id'),
-                    tenant=tenant
-                )
+                if issue:  # validate against tenant’s due for the issue
+                    try:
+                        tenant_payment_due = TenantPaymentDue.objects.select_for_update().get(
+                            tenant=tenant,
+                            issue=issue
+                        )
+                    except TenantPaymentDue.DoesNotExist:
+                        return Response({"detail": "No due record found for this tenant and issue."}, status=status.HTTP_400_BAD_REQUEST)
 
-                if tenant_payment_due.is_paid:
-                    return Response({"detail": "Payment already made for this issue."}, status=status.HTTP_400_BAD_REQUEST)
+                    if tenant_payment_due.is_paid:
+                        return Response({"detail": "Payment already made for this issue."}, status=status.HTTP_400_BAD_REQUEST)
 
-                payment = serializer.save(tenant=tenant, estate=tenant.estate)
+                    # Ensure amount matches issue amount
+                    if float(amount) != float(issue.amount):
+                        return Response(
+                            {"detail": f"Payment amount must equal issue amount ({issue.amount})."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
 
-                tenant_payment_due.is_paid = True
-                tenant_payment_due.date_paid = payment.date
-                tenant_payment_due.save()
+                    # Save payment
+                    payment = serializer.save(tenant=tenant, estate=estate, issue=issue)
 
+                    # Mark due as paid
+                    tenant_payment_due.is_paid = True
+                    tenant_payment_due.date_paid = payment.date
+                    tenant_payment_due.save()
+
+                else:  # donation / free payment (no issue linked)
+                    payment = serializer.save(tenant=tenant, estate=estate, issue=None)
+
+                # Update tenant balance
                 tenant.update_balance()
 
                 return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
 
-        except TenantPaymentDue.DoesNotExist:
-            return Response({"detail": "Payment due not found."}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 
 @api_view(['GET'])
